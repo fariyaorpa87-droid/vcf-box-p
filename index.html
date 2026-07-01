@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VCF号码工具箱 Pro</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft YaHei",Arial,sans-serif;background:#f3f6fb;color:#172033}
+header{background:linear-gradient(135deg,#2563eb,#0f766e);color:white;padding:20px 28px}
+header h1{margin:0;font-size:28px}
+header p{margin:8px 0 0;opacity:.95}
+.app{display:flex;min-height:calc(100vh - 92px)}
+.sidebar{width:230px;background:white;border-right:1px solid #e5e7eb;padding:18px}
+.menu{display:block;width:100%;border:0;background:#f1f5f9;margin-bottom:9px;padding:13px;border-radius:12px;text-align:left;font-size:15px;cursor:pointer}
+.menu.active{background:#2563eb;color:white}
+main{flex:1;padding:22px}
+.card{background:white;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 8px 24px rgba(15,23,42,.07)}
+h2{margin-top:0}
+textarea{width:100%;min-height:170px;border:1px solid #cbd5e1;border-radius:12px;padding:12px;font-size:14px;resize:vertical}
+input,select{border:1px solid #cbd5e1;border-radius:10px;padding:10px;font-size:14px}
+label{font-weight:700;margin:10px 0 6px;display:block}
+.btn{border:0;border-radius:10px;padding:10px 16px;margin:8px 8px 8px 0;cursor:pointer;color:white;background:#2563eb}
+.btn.green{background:#16a34a}
+.btn.gray{background:#64748b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.notice{background:#ecfdf5;border:1px solid #86efac;color:#166534;border-radius:12px;padding:12px;margin-bottom:16px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 14px}
+.preview{background:#0f172a;color:#dbeafe;border-radius:12px;padding:12px;white-space:pre-wrap;max-height:260px;overflow:auto}
+.hidden{display:none}
+.table{border-collapse:collapse;width:100%;margin-top:12px}
+.table th,.table td{border:1px solid #e5e7eb;padding:8px;text-align:left}
+.table th{background:#f8fafc}
+.small{color:#64748b;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+<h1>VCF号码工具箱 Pro</h1>
+<p>单机离线版：TXT 去重、双文档对比、拆分、合并、VCF 生成与分包</p>
+</header>
+
+<div class="app">
+<aside class="sidebar">
+<button class="menu active" onclick="showTab('dedupe',this)">号码去重</button>
+<button class="menu" onclick="showTab('compare',this)">双文档对比</button>
+<button class="menu" onclick="showTab('split',this)">TXT拆分</button>
+<button class="menu" onclick="showTab('merge',this)">TXT合并</button>
+<button class="menu" onclick="showTab('vcf',this)">VCF生成</button>
+<button class="menu" onclick="showTab('help',this)">说明</button>
+</aside>
+
+<main>
+<div class="notice">所有数据均在本机处理，不上传服务器，可离线使用。</div>
+
+<section id="dedupe" class="card tab">
+<h2>单文档去重</h2>
+<input type="file" accept=".txt,.csv" onchange="readToTextarea(this,'dedupeText')">
+<label>号码数据</label>
+<textarea id="dedupeText" placeholder="一行一个号码，或 号码 姓名 / 姓名 号码"></textarea>
+<button class="btn" onclick="singleDedupe()">开始去重</button>
+<button class="btn green" onclick="downloadText('dedupe_result.txt', state.dedupeResult.join('\n'))">下载 TXT</button>
+<div class="stats" id="dedupeStats"></div>
+<div class="preview" id="dedupePreview">结果预览</div>
+</section>
+
+<section id="compare" class="card tab hidden">
+<h2>双文档对比去重</h2>
+<div class="grid">
+<div><label>文档 A</label><input type="file" accept=".txt,.csv" onchange="readToTextarea(this,'textA')"><textarea id="textA"></textarea></div>
+<div><label>文档 B</label><input type="file" accept=".txt,.csv" onchange="readToTextarea(this,'textB')"><textarea id="textB"></textarea></div>
+</div>
+<label>输出方式</label>
+<select id="compareMode">
+<option value="aOnly">只保留 A 独有号码</option>
+<option value="bOnly">只保留 B 独有号码</option>
+<option value="merged">A+B 合并去重</option>
+<option value="same">只导出重复号码</option>
+</select>
+<button class="btn" onclick="compareDedupe()">开始对比</button>
+<button class="btn green" onclick="downloadText('compare_result.txt', state.compareResult.join('\n'))">下载 TXT</button>
+<div class="stats" id="compareStats"></div>
+<div class="preview" id="comparePreview">结果预览</div>
+</section>
+
+<section id="split" class="card tab hidden">
+<h2>TXT 按行拆分</h2>
+<input type="file" accept=".txt,.csv" onchange="readToTextarea(this,'splitText')">
+<textarea id="splitText"></textarea>
+<div class="grid">
+<div><label>每个文件行数</label><input id="splitSize" type="number" value="500" min="1"></div>
+<div><label>文件名前缀</label><input id="splitPrefix" value="numbers"></div>
+</div>
+<button class="btn" onclick="splitTxt()">生成拆分文件</button>
+<div class="stats" id="splitStats"></div>
+<div id="splitButtons"></div>
+<div class="preview" id="splitPreview">结果预览</div>
+</section>
+
+<section id="merge" class="card tab hidden">
+<h2>TXT 合并</h2>
+<input type="file" id="mergeFiles" accept=".txt,.csv" multiple onchange="readMultipleMerge(this)">
+<label><input type="checkbox" id="mergeDedupe" checked> 合并后去重</label>
+<button class="btn" onclick="mergeTxt()">开始合并</button>
+<button class="btn green" onclick="downloadText('merged.txt', state.mergeResult.join('\n'))">下载 TXT</button>
+<div class="stats" id="mergeStats"></div>
+<div class="preview" id="mergePreview">结果预览</div>
+</section>
+
+<section id="vcf" class="card tab hidden">
+<h2>VCF 生成</h2>
+<input type="file" accept=".txt,.csv" onchange="readToTextarea(this,'vcfText')">
+<textarea id="vcfText" placeholder="支持：号码、号码 姓名、姓名 号码"></textarea>
+<div class="grid">
+<div><label>联系人名前缀</label><input id="namePrefix" value="Contact"></div>
+<div><label>每个 VCF 联系人数量</label><input id="vcfSize" type="number" value="500" min="1"></div>
+<div><label>国家码</label><input id="countryCode" value="+1"></div>
+<div><label><input type="checkbox" id="addCountry" checked> 自动添加国家码</label></div>
+</div>
+<button class="btn" onclick="makeVcf()">生成 VCF</button>
+<button class="btn green" onclick="downloadText('contacts.vcf', state.vcfAll)">下载完整 VCF</button>
+<div id="vcfButtons"></div>
+<div class="stats" id="vcfStats"></div>
+<table class="table"><thead><tr><th>名字</th><th>号码</th></tr></thead><tbody id="vcfBody"></tbody></table>
+</section>
+
+<section id="help" class="card tab hidden">
+<h2>使用说明</h2>
+<p>这是纯 Electron 单机版，不依赖 Lovable，不打开网页。</p>
+<p>上传到 GitHub 后，进入 Actions，运行 <b>Build Windows EXE</b>，完成后在 Artifacts 下载。</p>
+<p class="small">如果要重新上传源码，请确保根目录直接包含 package.json、main.js、index.html、.github 文件夹。</p>
+</section>
+
+</main>
+</div>
+
+<script>
+const state={dedupeResult:[],compareResult:[],splitFiles:[],mergeTexts:[],mergeResult:[],vcfAll:"",vcfFiles:[]};
+
+function showTab(id,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  document.querySelectorAll('.menu').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function readToTextarea(input,id){
+  const f=input.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>document.getElementById(id).value=e.target.result;
+  r.readAsText(f,'UTF-8');
+}
+
+async function readMultipleMerge(input){
+  state.mergeTexts=[];
+  for(const f of input.files){state.mergeTexts.push(await f.text())}
+  alert('已读取 '+state.mergeTexts.length+' 个文件');
+}
+
+function cleanPhone(s){
+  const m=String(s||'').match(/(\+?\d[\d\s().-]{6,}\d)/);
+  if(!m)return "";
+  let p=m[1].replace(/[^\d+]/g,'');
+  p=p.replace(/^\+?1(?=\d{10}$)/,'');
+  return p;
+}
+
+function parseLines(text){
+  return String(text||'').split(/\r?\n|,/).map(x=>x.trim()).filter(Boolean).map(line=>{
+    const phone=cleanPhone(line);
+    const name=line.replace(/(\+?\d[\d\s().-]{6,}\d)/,'').trim().replace(/^[,;\-\s]+|[,;\-\s]+$/g,'');
+    return {raw:line,phone,name};
+  }).filter(x=>x.phone);
+}
+
+function uniqueRecords(records){
+  const seen=new Set(),out=[];
+  for(const r of records){if(!seen.has(r.phone)){seen.add(r.phone);out.push(r)}}
+  return out;
+}
+
+function stats(el,items){document.getElementById(el).innerHTML=items.map(i=>`<div class="stat">${i}</div>`).join('')}
+function preview(el,arr){document.getElementById(el).textContent=(arr||[]).slice(0,60).join('\n')||'无结果'}
+
+function singleDedupe(){
+  const rec=parseLines(document.getElementById('dedupeText').value);
+  const out=uniqueRecords(rec);
+  state.dedupeResult=out.map(r=>r.raw);
+  stats('dedupeStats',[`原始数量：${rec.length}`,`去重后：${out.length}`,`重复：${rec.length-out.length}`]);
+  preview('dedupePreview',state.dedupeResult);
+}
+
+function compareDedupe(){
+  const A=uniqueRecords(parseLines(document.getElementById('textA').value));
+  const B=uniqueRecords(parseLines(document.getElementById('textB').value));
+  const setA=new Set(A.map(x=>x.phone)),setB=new Set(B.map(x=>x.phone));
+  const mode=document.getElementById('compareMode').value;
+  let out=[];
+  if(mode==='aOnly')out=A.filter(x=>!setB.has(x.phone));
+  if(mode==='bOnly')out=B.filter(x=>!setA.has(x.phone));
+  if(mode==='merged')out=uniqueRecords([...A,...B]);
+  if(mode==='same')out=A.filter(x=>setB.has(x.phone));
+  state.compareResult=out.map(r=>r.raw);
+  const same=A.filter(x=>setB.has(x.phone)).length;
+  stats('compareStats',[`A数量：${A.length}`,`B数量：${B.length}`,`重复：${same}`,`输出：${out.length}`]);
+  preview('comparePreview',state.compareResult);
+}
+
+function splitTxt(){
+  const lines=document.getElementById('splitText').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const size=parseInt(document.getElementById('splitSize').value)||500;
+  const prefix=document.getElementById('splitPrefix').value||'numbers';
+  state.splitFiles=[];
+  for(let i=0;i<lines.length;i+=size){
+    state.splitFiles.push({name:`${prefix}_part_${String(state.splitFiles.length+1).padStart(3,'0')}.txt`,content:lines.slice(i,i+size).join('\n')});
+  }
+  stats('splitStats',[`总行数：${lines.length}`,`每文件：${size}`,`文件数：${state.splitFiles.length}`]);
+  document.getElementById('splitButtons').innerHTML=state.splitFiles.map((f,i)=>`<button class="btn gray" onclick="downloadText(state.splitFiles[${i}].name,state.splitFiles[${i}].content)">${f.name}</button>`).join('');
+  preview('splitPreview',state.splitFiles.map(f=>f.name));
+}
+
+function mergeTxt(){
+  let lines=state.mergeTexts.join('\n').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const before=lines.length;
+  if(document.getElementById('mergeDedupe').checked){
+    const seen=new Set();
+    lines=lines.filter(x=>{
+      const p=cleanPhone(x)||x;
+      if(seen.has(p))return false;
+      seen.add(p);
+      return true;
+    });
+  }
+  state.mergeResult=lines;
+  stats('mergeStats',[`原始行数：${before}`,`输出行数：${lines.length}`]);
+  preview('mergePreview',lines);
+}
+
+function makeVcf(){
+  const rec=parseLines(document.getElementById('vcfText').value);
+  const prefix=document.getElementById('namePrefix').value||'Contact';
+  const code=document.getElementById('countryCode').value||'+1';
+  const add=document.getElementById('addCountry').checked;
+  const contacts=rec.map((r,i)=>{
+    let n=r.name||`${prefix} ${String(i+1).padStart(3,'0')}`;
+    let p=r.phone;
+    if(add && !p.startsWith('+')) p=code+p.replace(/^\+/,'');
+    return {name:n,phone:p};
+  });
+  const vcf=c=>`BEGIN:VCARD\nVERSION:3.0\nFN:${c.name}\nTEL;TYPE=CELL:${c.phone}\nEND:VCARD`;
+  state.vcfAll=contacts.map(vcf).join('\n');
+  const size=parseInt(document.getElementById('vcfSize').value)||500;
+  state.vcfFiles=[];
+  for(let i=0;i<contacts.length;i+=size){
+    state.vcfFiles.push({name:`contacts_part_${String(state.vcfFiles.length+1).padStart(3,'0')}.vcf`,content:contacts.slice(i,i+size).map(vcf).join('\n')});
+  }
+  stats('vcfStats',[`联系人：${contacts.length}`,`每VCF：${size}`,`文件数：${state.vcfFiles.length}`]);
+  document.getElementById('vcfBody').innerHTML=contacts.slice(0,80).map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.phone)}</td></tr>`).join('');
+  document.getElementById('vcfButtons').innerHTML=state.vcfFiles.map((f,i)=>`<button class="btn gray" onclick="downloadText(state.vcfFiles[${i}].name,state.vcfFiles[${i}].content)">${f.name}</button>`).join('');
+}
+
+function downloadText(name,content){
+  if(!content){alert('没有可下载的内容');return}
+  const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+</script>
+</body>
+</html>
